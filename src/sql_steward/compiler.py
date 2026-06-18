@@ -255,6 +255,73 @@ def compile_metric(
     return Compiled(_emit(query, dialect), where.params, dialect, tuple(sorted(touched)))
 
 
+def compile_vector_search(
+    layer: SemanticLayer,
+    entity: str,
+    query_embedding: list[float],
+    fields: list[str] | None = None,
+    filters: list[dict] | None = None,
+    k: int = 10,
+    dialect: str | None = None,
+) -> Compiled:
+    """Compile a pgvector nearest-neighbour search over an entity's embedding column.
+
+    The query embedding is bound as a parameter; the embedding column is never
+    returned. PostgreSQL-only (pgvector). Same PII refusal as everything else.
+    """
+    dialect = dialect or layer.dialect
+    if dialect not in ("postgres", "postgresql"):
+        raise Refusal(
+            kind="vector_unsupported_dialect",
+            detail="Semantic search needs pgvector, which is PostgreSQL-only.",
+            recovery={"dialect": dialect},
+        )
+    ent = layer.get_entity(entity)
+    if ent.search is None:
+        raise Refusal(
+            kind="no_vector_search",
+            detail=f"Entity '{entity}' has no semantic-search (vector) configuration.",
+        )
+
+    if fields:
+        selected = list(fields)
+    elif ent.search.returns:
+        selected = list(ent.search.returns)
+    else:
+        selected = [f for f in ent.fields if f != ent.search.vector_column]
+    for f in selected:
+        _check_pii(layer, entity, ent.get_field(f))
+
+    where = _Where()
+    for flt in filters or []:
+        ref = flt["field"]
+        ref_entity = ref.split(".")[0] if "." in ref else entity
+        if ref_entity != entity:
+            raise Refusal(
+                kind="unreachable_entity",
+                detail="Semantic-search filters must be on the same entity.",
+                recovery={"entity": entity},
+            )
+        _, fdef = layer.resolve_ref(ref, entity)
+        _check_pii(layer, ref_entity, fdef)
+        where.add(f"{entity}.{fdef.name}", flt.get("op", "="), flt.get("value"))
+
+    # Bind the embedding as a text vector literal cast to pgvector. Building the
+    # SQL directly (not via sqlglot) because `<=>` is a pgvector operator.
+    vec = "[" + ",".join(repr(float(x)) for x in query_embedding) + "]"
+    params = {"qvec": vec, **where.params}
+    cols = ", ".join(f"{entity}.{f}" for f in selected)
+    distance = f"{entity}.{ent.search.vector_column} <=> CAST(:qvec AS vector)"
+    where_sql = (" WHERE " + " AND ".join(where.conditions)) if where.conditions else ""
+    limit = _clamp_limit(layer, k)
+    sql = (
+        f"SELECT {cols}, {distance} AS distance "
+        f"FROM {_from_clause(layer, entity)}{where_sql} "
+        f"ORDER BY distance LIMIT {limit}"
+    )
+    return Compiled(sql=sql, params=params, dialect="postgres", entities=(entity,))
+
+
 def _clamp_limit(layer: SemanticLayer, limit: int | None) -> int:
     cap = layer.policy.max_rows
     if limit is None:

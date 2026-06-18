@@ -96,6 +96,36 @@ def mask_rows(rows: list[dict]) -> list[dict]:
         return rows
 
 
+# --- per-role query budget (hard cap) --------------------------------------
+
+_budget_counts: dict = {}
+
+
+def enforce_budget() -> None:
+    """Hard cap on queries per role for this server session.
+
+    Set ``SQL_STEWARD_QUERY_BUDGET`` to an integer. Mirrors the runtime
+    spend-cap idea from gateway-style governance, kept simple: once a role has
+    run that many queries this process, further ones are refused. No-op if unset.
+    """
+    cap = os.environ.get("SQL_STEWARD_QUERY_BUDGET")
+    if not cap:
+        return
+    try:
+        cap_n = int(cap)
+    except ValueError:
+        return
+    role = os.environ.get("SQL_STEWARD_ROLE", "_default")
+    used = _budget_counts.get(role, 0) + 1
+    _budget_counts[role] = used
+    if used > cap_n:
+        raise Refusal(
+            kind="budget_exceeded",
+            detail=f"Query budget of {cap_n} for role '{role}' is exhausted for this session.",
+            recovery={"budget": cap_n, "role": role},
+        )
+
+
 # --- audit via agent-blackbox ----------------------------------------------
 
 _ledger = None

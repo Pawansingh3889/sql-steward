@@ -17,9 +17,15 @@ from dotenv import load_dotenv
 from fastmcp import FastMCP
 
 from sql_steward import __version__
-from sql_steward.compiler import Refusal, compile_metric, compile_records
+from sql_steward.compiler import (
+    Refusal,
+    compile_metric,
+    compile_records,
+    compile_vector_search,
+)
+from sql_steward.embeddings import embed
 from sql_steward.engine import Engine
-from sql_steward.safety import audit, audit_status, enforce_rbac, mask_rows
+from sql_steward.safety import audit, audit_status, enforce_budget, enforce_rbac, mask_rows
 from sql_steward.semantic import SemanticError, SemanticLayer
 
 load_dotenv()
@@ -82,6 +88,7 @@ def describe_entity(entity: str) -> dict:
         "entity": e.name,
         "table": e.table,
         "description": e.description,
+        "semantic_search": e.search is not None,
         "fields": [
             {
                 "name": f.name,
@@ -153,6 +160,33 @@ def get_metric(
 
 
 @mcp.tool()
+def semantic_search(
+    entity: str,
+    query: str,
+    k: int = 10,
+    filters: list[dict] | None = None,
+) -> dict:
+    """Vector similarity search over an entity's embedding column (pgvector).
+
+    `query` is embedded locally and matched against the entity's configured
+    embedding; the closest rows are returned (the embedding itself never is).
+    Requires the entity to have a `search` config and a local embedding model
+    (SQL_STEWARD_EMBED_URL). PostgreSQL-only. Same PII refusal as everything else.
+    """
+    vec = embed(query)
+    if vec is None:
+        return {
+            "error": "Semantic search needs a local embedding model. "
+            "Set SQL_STEWARD_EMBED_URL (and SQL_STEWARD_EMBED_MODEL)."
+        }
+    return _run(
+        lambda layer: compile_vector_search(layer, entity, vec, filters=filters, k=k),
+        target=entity,
+        kind="semantic_search",
+    )
+
+
+@mcp.tool()
 def audit_verify() -> dict:
     """Verify the tamper-evident audit chain (agent-blackbox), if enabled.
 
@@ -173,6 +207,7 @@ def _run(compile_fn, target: str, kind: str) -> dict:
 
     try:
         enforce_rbac(compiled.sql, compiled.dialect)
+        enforce_budget()
     except Refusal as r:
         audit(action=f"{kind}_refused", target=target, payload=compiled.sql,
               meta=r.kind, outcome="refused")

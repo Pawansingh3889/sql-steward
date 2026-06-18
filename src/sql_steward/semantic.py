@@ -49,6 +49,19 @@ class FieldDef:
 
 
 @dataclass(frozen=True)
+class VectorSearch:
+    """pgvector semantic-search config for an entity.
+
+    `vector_column` is the entity field holding the embedding; `returns` are the
+    default fields a search yields (the embedding itself is never returned).
+    """
+
+    vector_column: str
+    dim: int = 0
+    returns: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class EntityDef:
     """A table the agent may read, exposed under a stable logical name."""
 
@@ -57,6 +70,7 @@ class EntityDef:
     primary_key: str | None = None
     description: str = ""
     fields: dict[str, FieldDef] = field(default_factory=dict)
+    search: "VectorSearch | None" = None
 
     def get_field(self, field_name: str) -> FieldDef:
         if field_name not in self.fields:
@@ -160,12 +174,21 @@ class SemanticLayer:
                 )
                 for fname, fraw in (raw.get("fields") or {}).items()
             }
+            raw_search = raw.get("search")
+            search = None
+            if raw_search:
+                search = VectorSearch(
+                    vector_column=raw_search["vector_column"],
+                    dim=int(raw_search.get("dim", 0)),
+                    returns=tuple(raw_search.get("returns") or ()),
+                )
             entities[name] = EntityDef(
                 name=name,
                 table=str(raw.get("table", name)),
                 primary_key=raw.get("primary_key"),
                 description=str(raw.get("description", "")),
                 fields=fields,
+                search=search,
             )
 
         joins = tuple(
@@ -218,6 +241,11 @@ class SemanticLayer:
         for j in self.joins:
             self.get_entity(j.left)
             self.get_entity(j.right)
+        for ent in self.entities.values():
+            if ent.search is not None:
+                ent.get_field(ent.search.vector_column)
+                for ref in ent.search.returns:
+                    ent.get_field(ref)
         for m in self.metrics.values():
             entity = self.get_entity(m.entity)
             if m.field != "*":

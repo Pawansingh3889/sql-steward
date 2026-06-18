@@ -1,7 +1,12 @@
 """Tests for the compile-from-definitions engine, including the refusals."""
 import pytest
 
-from sql_steward.compiler import Refusal, compile_metric, compile_records
+from sql_steward.compiler import (
+    Refusal,
+    compile_metric,
+    compile_records,
+    compile_vector_search,
+)
 from sql_steward.semantic import SemanticLayer
 
 LAYER_DICT = {
@@ -31,6 +36,19 @@ LAYER_DICT = {
         "tickets": {
             "table": "tickets",
             "fields": {"id": {"type": "int"}, "severity": {"type": "text"}},
+        },
+        # vector-search entity (pgvector)
+        "documents": {
+            "table": "docs",
+            "fields": {
+                "id": {"type": "int"},
+                "title": {"type": "text"},
+                "author": {"type": "text", "pii": "PERSON"},
+                "owner_email": {"type": "text", "pii": "EMAIL_ADDRESS"},
+                "body": {"type": "text"},
+                "embedding": {"type": "vector"},
+            },
+            "search": {"vector_column": "embedding", "dim": 4, "returns": ["id", "title"]},
         },
     },
     "joins": [
@@ -162,3 +180,50 @@ def test_sqlite_dialect_round_trips(layer):
     c = compile_metric(layer, "mrr_total", dimensions=["plan"], dialect="sqlite")
     assert c.dialect == "sqlite"
     assert c.sql.lower().startswith("select")
+
+
+# -- vector / semantic search -----------------------------------------------
+
+def test_vector_search_compiles(layer):
+    c = compile_vector_search(layer, "documents", [0.1, 0.2, 0.3, 0.4])
+    s = c.sql.lower()
+    assert "<=>" in c.sql
+    assert "cast(:qvec as vector)" in s
+    assert "order by distance" in s
+    assert "limit" in s
+    assert c.params["qvec"] == "[0.1,0.2,0.3,0.4]"
+    assert c.dialect == "postgres"
+
+
+def test_vector_search_default_returns_configured_fields(layer):
+    c = compile_vector_search(layer, "documents", [0.1, 0.2, 0.3, 0.4])
+    head = c.sql.split("FROM")[0]
+    assert "documents.id" in head and "documents.title" in head
+
+
+def test_vector_search_pii_field_refused(layer):
+    with pytest.raises(Refusal) as e:
+        compile_vector_search(layer, "documents", [0.1, 0.2, 0.3, 0.4],
+                              fields=["id", "owner_email"])
+    assert e.value.kind == "pii_blocked"
+
+
+def test_vector_search_filter_binds_param(layer):
+    c = compile_vector_search(
+        layer, "documents", [0.1, 0.2, 0.3, 0.4],
+        filters=[{"field": "title", "op": "like", "value": "%spec%"}],
+    )
+    assert c.params["p0"] == "%spec%"
+    assert "qvec" in c.params
+
+
+def test_vector_search_unsupported_dialect_refused(layer):
+    with pytest.raises(Refusal) as e:
+        compile_vector_search(layer, "documents", [0.1, 0.2], dialect="sqlite")
+    assert e.value.kind == "vector_unsupported_dialect"
+
+
+def test_vector_search_without_config_refused(layer):
+    with pytest.raises(Refusal) as e:
+        compile_vector_search(layer, "customers", [0.1, 0.2])
+    assert e.value.kind == "no_vector_search"

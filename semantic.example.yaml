@@ -28,6 +28,21 @@ entities:
       mrr: {type: numeric, description: Monthly recurring revenue in USD.}
       status: {type: text}
 
+  documents:
+    table: documents
+    primary_key: id
+    description: Knowledge-base documents, semantically searchable (pgvector).
+    fields:
+      id: {type: int}
+      title: {type: text}
+      body: {type: text}
+      embedding: {type: vector}          # pgvector column
+    # Enables semantic_search() over this entity. PostgreSQL + pgvector only.
+    search:
+      vector_column: embedding
+      dim: 768
+      returns: [id, title]               # the embedding itself is never returned
+
 # Only joins listed here are reachable. Ask for a relationship that is not here
 # and sql-steward refuses rather than inventing one.
 joins:
