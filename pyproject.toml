@@ -1,0 +1,78 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sql-steward"
+version = "0.1.0"
+description = "Governed SQL MCP server: the agent never writes SQL. Queries are compiled from a semantic layer you control, blocked PII is refused before the query runs, and every call can land in a tamper-evident audit log. Multi-dialect (SQL Server, Postgres, SQLite)."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [{ name = "Pawan Singh Kapkoti" }]
+keywords = [
+    "mcp",
+    "model-context-protocol",
+    "sql",
+    "semantic-layer",
+    "governance",
+    "read-only",
+    "pii",
+    "audit",
+    "postgres",
+    "sql-server",
+    "mssql",
+    "sqlite",
+    "llm",
+    "claude",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Database",
+    "Topic :: Security",
+]
+dependencies = [
+    "fastmcp>=2.0",
+    "pydantic>=2.0",
+    "sqlglot>=23.0",          # compiles + transpiles the query per dialect
+    "sqlalchemy>=2.0",        # multi-engine execution
+    "pyyaml>=6.0",            # semantic layer
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+postgres = ["psycopg[binary]>=3.1"]
+mssql = ["pyodbc>=5.1"]
+rbac = ["query-warden>=0.1"]      # second-pass role check on the compiled SQL
+mask = ["pii-veil>=0.1"]          # mask any PII left in result rows
+audit = ["agent-blackbox>=0.1"]   # tamper-evident, hash-chained audit log
+dev = ["pytest>=8.0", "ruff>=0.4"]
+
+[project.scripts]
+sql-steward = "sql_steward.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/Pawansingh3889/sql-steward"
+Repository = "https://github.com/Pawansingh3889/sql-steward"
+Issues = "https://github.com/Pawansingh3889/sql-steward/issues"
+"Governed Agent Stack" = "https://github.com/Pawansingh3889/governed-agent-stack"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sql_steward"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/sql_steward", "README.md", "LICENSE", "semantic.example.yaml", "tests"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
