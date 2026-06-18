@@ -88,6 +88,7 @@ Ask for a join that isn't defined and you get `unreachable_entity`, not an inven
 | `list_metrics()` | Metrics and the dimensions/filters each allows |
 | `get_records(entity, fields, filters, order_by, limit)` | Read rows from one entity |
 | `get_metric(metric, dimensions, filters, limit)` | Compute a pre-approved aggregate |
+| `semantic_search(entity, query, k, filters)` | pgvector nearest-neighbour search over an entity's embedding column |
 | `audit_verify()` | Verify the tamper-evident audit chain |
 
 Filters are `{field, op, value}`; operators are `=, !=, <, <=, >, >=, like, in, not in, is null, is not null`. Values are always bound parameters, never inlined.
@@ -123,7 +124,30 @@ export SQL_STEWARD_POLICY=/path/to/policy.yaml   # query-warden second-pass role
 export SQL_STEWARD_ROLE=analyst
 export SQL_STEWARD_MASK=1                         # pii-veil masks anything left in results
 export SQL_STEWARD_AUDIT_DB=logs/steward.db       # agent-blackbox audit chain (on if installed)
+export SQL_STEWARD_QUERY_BUDGET=200               # hard cap on queries per role per session
+export SQL_STEWARD_EMBED_URL=http://localhost:11434/api/embeddings  # local embeddings for semantic_search
+export SQL_STEWARD_EMBED_MODEL=nomic-embed-text
 ```
+
+## Semantic search (pgvector)
+
+Give an entity a `search` block pointing at a pgvector column and the agent gets a `semantic_search` tool, governed exactly like everything else (PII refused, results masked, calls audited):
+
+```yaml
+entities:
+  documents:
+    table: documents
+    fields:
+      id: {type: int}
+      title: {type: text}
+      embedding: {type: vector}
+    search:
+      vector_column: embedding
+      dim: 768
+      returns: [id, title]
+```
+
+The query text is embedded locally (set `SQL_STEWARD_EMBED_URL` to a local Ollama endpoint, so nothing leaves the building), and matched with pgvector's `<=>` operator. PostgreSQL only. The embedding column is never returned.
 
 - [query-warden](https://github.com/Pawansingh3889/query-warden) re-checks the compiled SQL against a role policy.
 - [pii-veil](https://github.com/Pawansingh3889/pii-veil) masks any PII that survives into result rows.
