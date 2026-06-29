@@ -69,6 +69,31 @@ metrics:
     dimensions_allowed: [country]
     filters_allowed: [country]
 
+# Declared data-quality checks. Each compiles to a read-only count of violations;
+# run_checks runs them all and returns a readiness score. kinds: not_null,
+# unique, range, accepted_values, row_count_min. severity is error (default) or
+# warn -- a failing error makes the status "failing", a failing warn "degraded".
+checks:
+  email_present:
+    entity: customers
+    kind: not_null
+    field: email
+  country_known:
+    entity: customers
+    kind: accepted_values
+    field: country
+    values: [UK, US, NL]
+  mrr_non_negative:
+    entity: subscriptions
+    kind: range
+    field: mrr
+    min: 0
+  has_customers:
+    entity: customers
+    kind: row_count_min
+    min: 1
+    severity: warn
+
 # What the layer refuses, before any query runs.
 policy:
   block_pii: [EMAIL_ADDRESS, CREDIT_CARD]

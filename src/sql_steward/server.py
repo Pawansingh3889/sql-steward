@@ -19,6 +19,7 @@ from fastmcp import FastMCP
 from sql_steward import __version__
 from sql_steward.compiler import (
     Refusal,
+    compile_check,
     compile_metric,
     compile_records,
     compile_vector_search,
@@ -184,6 +185,65 @@ def semantic_search(
         target=entity,
         kind="semantic_search",
     )
+
+
+@mcp.tool()
+def list_checks() -> dict:
+    """List the declared data-quality checks the layer can run."""
+    layer = get_layer()
+    return {
+        "checks": [
+            {"name": c.name, "entity": c.entity, "kind": c.kind, "field": c.field,
+             "severity": c.severity, "description": c.description}
+            for c in layer.checks.values()
+        ]
+    }
+
+
+@mcp.tool()
+def run_checks() -> dict:
+    """Run the declared data-quality checks and return a readiness summary.
+
+    Each check compiles to a read-only violation count; zero violations passes.
+    Returns a readiness score (percent of checks passing), an overall status, and
+    a per-check breakdown. An 'error'-severity failure makes the status 'failing';
+    a 'warn'-severity failure makes it 'degraded'.
+    """
+    try:
+        layer = get_layer()
+        engine = get_engine()
+    except (SemanticError, RuntimeError) as ex:
+        return {"error": str(ex)}
+
+    results = []
+    passed = 0
+    error_failures = 0
+    warn_failures = 0
+    for c in layer.checks.values():
+        try:
+            compiled = compile_check(layer, c)
+            rows = engine.run(compiled)
+            violations = int(next(iter(rows[0].values()))) if rows else 0
+        except Exception as exc:  # surface a broken check without failing the rest
+            results.append({"name": c.name, "error": str(exc)[:200]})
+            error_failures += 1
+            continue
+        ok = violations == 0
+        passed += int(ok)
+        if not ok and c.severity == "error":
+            error_failures += 1
+        elif not ok:
+            warn_failures += 1
+        results.append({
+            "name": c.name, "entity": c.entity, "kind": c.kind, "field": c.field,
+            "severity": c.severity, "violations": violations, "passed": ok,
+        })
+
+    total = len(layer.checks)
+    score = round(100 * passed / total) if total else 100
+    status = "ok" if error_failures == 0 and warn_failures == 0 else ("failing" if error_failures else "degraded")
+    audit(action="run_checks", target="data_quality", meta=f"{passed}/{total}", outcome=status)
+    return {"readiness": score, "status": status, "passed": passed, "total": total, "checks": results}
 
 
 @mcp.tool()

@@ -1,5 +1,16 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- **Declarative data-quality checks.** A `checks:` block in the semantic layer
+  declares assertions (`not_null`, `unique`, `range`, `accepted_values`,
+  `row_count_min`) with `error` or `warn` severity. Two tools expose them:
+  `list_checks` and `run_checks`. Each check compiles to a read-only violation
+  count (the rule lives in the layer, so the agent runs the declared checks but
+  cannot invent new ones), and `run_checks` returns a readiness score and an
+  overall status (`ok` / `degraded` / `failing`).
+
 ## [0.2.0] - 2026-06-18
 
 ### Added

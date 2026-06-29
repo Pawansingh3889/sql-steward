@@ -18,6 +18,7 @@ import yaml
 
 # Aggregates a metric is allowed to use. Deliberately small.
 ALLOWED_AGGREGATES = {"sum", "count", "count_distinct", "avg", "min", "max"}
+ALLOWED_CHECKS = {"not_null", "unique", "range", "accepted_values", "row_count_min"}
 
 
 class SemanticError(ValueError):
@@ -109,6 +110,26 @@ class MetricDef:
 
 
 @dataclass(frozen=True)
+class CheckDef:
+    """A declared data-quality assertion. It compiles to a query that counts
+    violations; zero violations passes. Like metrics, the rule is fixed in the
+    layer -- the agent runs the declared checks, it cannot invent new ones.
+
+    kinds: not_null | unique | range | accepted_values | row_count_min
+    """
+
+    name: str
+    entity: str
+    kind: str
+    field: str | None = None
+    min: float | None = None
+    max: float | None = None
+    values: tuple = ()
+    severity: str = "error"  # error | warn
+    description: str = ""
+
+
+@dataclass(frozen=True)
 class Policy:
     """What the layer refuses. PII categories listed here are blocked at the
     tool boundary, before any SQL is compiled or run."""
@@ -124,6 +145,7 @@ class SemanticLayer:
     joins: tuple[JoinDef, ...]
     metrics: dict[str, MetricDef]
     policy: Policy
+    checks: dict[str, "CheckDef"] = field(default_factory=dict)
 
     # -- lookups -------------------------------------------------------------
 
@@ -215,6 +237,27 @@ class SemanticLayer:
                 filters_allowed=tuple(raw.get("filters_allowed") or ()),
             )
 
+        checks: dict[str, CheckDef] = {}
+        for name, raw in (data.get("checks") or {}).items():
+            raw = raw or {}
+            kind = str(raw.get("kind", "")).strip().lower()
+            if kind not in ALLOWED_CHECKS:
+                raise SemanticError(
+                    f"Check '{name}' uses unsupported kind '{kind}'. "
+                    f"Allowed: {sorted(ALLOWED_CHECKS)}"
+                )
+            checks[name] = CheckDef(
+                name=name,
+                entity=raw["entity"],
+                kind=kind,
+                field=raw.get("field"),
+                min=raw.get("min"),
+                max=raw.get("max"),
+                values=tuple(raw.get("values") or ()),
+                severity=str(raw.get("severity", "error")).strip().lower(),
+                description=str(raw.get("description", "")),
+            )
+
         pol_raw = data.get("policy") or {}
         policy = Policy(
             block_pii=frozenset(pol_raw.get("block_pii") or ()),
@@ -227,6 +270,7 @@ class SemanticLayer:
             joins=joins,
             metrics=metrics,
             policy=policy,
+            checks=checks,
         )
         layer.validate()
         return layer
@@ -253,3 +297,15 @@ class SemanticLayer:
                 entity.get_field(m.field)
             for ref in (*m.dimensions_allowed, *m.filters_allowed):
                 self.resolve_ref(ref, m.entity)
+        for c in self.checks.values():
+            entity = self.get_entity(c.entity)
+            if c.kind != "row_count_min":
+                if not c.field:
+                    raise SemanticError(f"Check '{c.name}' ({c.kind}) needs a 'field'")
+                entity.get_field(c.field)
+            if c.kind == "range" and c.min is None and c.max is None:
+                raise SemanticError(f"Check '{c.name}' (range) needs 'min' or 'max'")
+            if c.kind == "accepted_values" and not c.values:
+                raise SemanticError(f"Check '{c.name}' (accepted_values) needs 'values'")
+            if c.kind == "row_count_min" and c.min is None:
+                raise SemanticError(f"Check '{c.name}' (row_count_min) needs 'min'")

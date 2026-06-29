@@ -17,7 +17,7 @@ from dataclasses import dataclass
 
 import sqlglot
 
-from sql_steward.semantic import FieldDef, SemanticLayer
+from sql_steward.semantic import CheckDef, FieldDef, SemanticLayer
 
 # Comparison operators an agent may use in a filter. Anything else is rejected.
 _OPERATORS = {
@@ -327,3 +327,54 @@ def _clamp_limit(layer: SemanticLayer, limit: int | None) -> int:
     if limit is None:
         return cap
     return max(1, min(int(limit), cap))
+
+
+def _num(v) -> str:
+    f = float(v)
+    return str(int(f)) if f.is_integer() else repr(f)
+
+
+def _lit(v) -> str:
+    if isinstance(v, bool):
+        return "TRUE" if v else "FALSE"
+    if isinstance(v, (int, float)):
+        return _num(v)
+    return "'" + str(v).replace("'", "''") + "'"
+
+
+def compile_check(layer: SemanticLayer, check: CheckDef, dialect: str | None = None) -> Compiled:
+    """Compile a declared data-quality check into a violation-count SELECT.
+
+    The query yields a single number: how many rows violate the check. Zero means
+    it passes. Read-only and dialect-correct, like every other query here; the
+    rule comes from the layer, so thresholds are layer-trusted, not agent input.
+    """
+    dialect = dialect or layer.dialect
+    entity = layer.get_entity(check.entity)
+    table = entity.table
+    col = check.field
+
+    if check.kind == "not_null":
+        sql = f"SELECT COUNT(*) AS violations FROM {table} WHERE {col} IS NULL"
+    elif check.kind == "unique":
+        sql = (
+            f"SELECT COUNT(*) AS violations FROM "
+            f"(SELECT {col} FROM {table} GROUP BY {col} HAVING COUNT(*) > 1) AS dups"
+        )
+    elif check.kind == "range":
+        conds = []
+        if check.min is not None:
+            conds.append(f"{col} < {_num(check.min)}")
+        if check.max is not None:
+            conds.append(f"{col} > {_num(check.max)}")
+        sql = f"SELECT COUNT(*) AS violations FROM {table} WHERE {' OR '.join(conds)}"
+    elif check.kind == "accepted_values":
+        vals = ", ".join(_lit(v) for v in check.values)
+        sql = f"SELECT COUNT(*) AS violations FROM {table} WHERE {col} NOT IN ({vals})"
+    elif check.kind == "row_count_min":
+        sql = f"SELECT CASE WHEN COUNT(*) < {_num(check.min)} THEN 1 ELSE 0 END AS violations FROM {table}"
+    else:  # unreachable; the layer validates kinds up front
+        raise Refusal("unsupported_check", f"Check kind '{check.kind}' is not supported.")
+
+    parsed = sqlglot.parse_one(sql, read=dialect)
+    return Compiled(sql=parsed.sql(dialect=dialect), params={}, dialect=dialect, entities=(check.entity,))
