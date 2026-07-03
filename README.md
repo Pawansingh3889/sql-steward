@@ -157,6 +157,24 @@ The query text is embedded locally (set `SQL_STEWARD_EMBED_URL` to a local Ollam
 
 A typical SQL MCP validates arbitrary SQL the model wrote (a blocklist: catch what's bad). sql-steward compiles SQL from definitions you wrote (an allow-list: only what's described exists). The read-only and PII guarantees hold by construction rather than by inspection, and the query surface is the same across three engines.
 
+## Versus a semantic layer (Cube, dbt Semantic Layer, Cortex Analyst, Genie)
+
+The nearest tools are not other MCP servers, they are semantic layers. Cube and the dbt Semantic Layer already expose compiled, metric-only access, and Snowflake Cortex Analyst and Databricks Genie both answer natural-language questions over a governed model. If you run on their platform, use them. This project exists for the case they do not cover:
+
+- **On-prem and air-gappable.** sql-steward is a pip install that talks to SQL Server, Postgres or SQLite with no account, no warehouse, and no data leaving the building. Cortex Analyst is Snowflake, Genie is Databricks, and Cube's cloud features assume their service. For a factory or a hospital that cannot send data to a vendor, that difference is the whole decision.
+- **PII refused before retrieval, at the same chokepoint.** A blocked field is refused at compile time for every caller, so the model cannot read what policy forbids even to reason over. Semantic layers govern which metrics you can query; they are not built to guarantee a tagged column never reaches the model.
+- **One tamper-evident audit for the whole agent, not just SQL.** The same gate pattern wraps KQL, document retrieval and agent memory in the [composed stack](https://github.com/Pawansingh3889/governed-agent-stack), under one hash-chained ledger. A warehouse semantic layer governs the warehouse; it does not govern the agent's other tools.
+
+Short version: a semantic layer makes queries safe on its platform. sql-steward makes an agent safe on your infrastructure, across every surface it can reach.
+
+## Scaling to a real schema
+
+The semantic layer is authored by hand on purpose, so it reads and reviews like code. That is the right default for tens of tables and the wrong one for thousands: nobody hand-writes a layer for a 10,000-table ERP, and returning the whole layer in one `list_entities` call would not fit an agent's context anyway. The intended path for large schemas, and the current limitation, stated plainly:
+
+- **Bootstrap, then review.** A generator (`sql-steward init --from-db`, on the roadmap) is meant to introspect `information_schema`, propose PII tags from column-name and type heuristics, and emit a draft layer a human then narrows. The point is not to auto-expose everything; it is to turn a blank file into a reviewable starting point. Today the layer is written by hand, so a large schema is real work up front.
+- **Scope beats size.** A governed layer should expose the handful of entities an agent actually needs, not the whole database. A 10,000-table schema still becomes a 20-entity contract; the discipline is deciding what belongs, which is a feature of the model, not a limit of the tool.
+- **Discovery is paginated by design intent.** `list_entities`/`describe_entity` are meant to be browsed with search and paging as the layer grows; oversized single responses are a known edge to close before this is pointed at a very large layer.
+
 ## Develop
 
 ```bash
