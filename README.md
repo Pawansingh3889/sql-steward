@@ -169,11 +169,17 @@ Short version: a semantic layer makes queries safe on its platform. sql-steward 
 
 ## Scaling to a real schema
 
-The semantic layer is authored by hand on purpose, so it reads and reviews like code. That is the right default for tens of tables and the wrong one for thousands: nobody hand-writes a layer for a 10,000-table ERP, and returning the whole layer in one `list_entities` call would not fit an agent's context anyway. The intended path for large schemas, and the current limitation, stated plainly:
+The semantic layer is authored by hand on purpose, so it reads and reviews like code. That is the right default for tens of tables and the wrong one for thousands: nobody hand-writes a layer for a 10,000-table ERP, and returning the whole layer in one `list_entities` call would not fit an agent's context anyway. How that scales:
 
-- **Bootstrap, then review.** A generator (`sql-steward init --from-db`, on the roadmap) is meant to introspect `information_schema`, propose PII tags from column-name and type heuristics, and emit a draft layer a human then narrows. The point is not to auto-expose everything; it is to turn a blank file into a reviewable starting point. Today the layer is written by hand, so a large schema is real work up front.
-- **Scope beats size.** A governed layer should expose the handful of entities an agent actually needs, not the whole database. A 10,000-table schema still becomes a 20-entity contract; the discipline is deciding what belongs, which is a feature of the model, not a limit of the tool.
-- **Discovery is paginated by design intent.** `list_entities`/`describe_entity` are meant to be browsed with search and paging as the layer grows; oversized single responses are a known edge to close before this is pointed at a very large layer.
+- **Bootstrap, then review.** `sql-steward init --from-db <url>` reflects a live schema, maps column types, proposes PII tags from column-name heuristics (biased toward over-tagging, so a leak is a review edit rather than a default), and infers joins from foreign keys. It emits a draft layer that loads and validates as-is, with a header that tells you what to narrow. The point is not to auto-expose everything; it is to remove the blank-page problem so a large schema starts as a reviewable file, not a hand-typed one.
+
+  ```bash
+  sql-steward init --from-db "postgresql+psycopg://readonly@db/warehouse" --out semantic.yaml
+  # then delete entities you do not need, check the PII tags, add metrics
+  ```
+
+- **Scope beats size.** A governed layer should expose the handful of entities an agent actually needs, not the whole database. A 10,000-table schema still becomes a 20-entity contract; the discipline is deciding what belongs (use `--include`/`--exclude` to draft only a slice), which is a feature of the model, not a limit of the tool.
+- **Discovery grows with the layer.** `list_entities`/`describe_entity` are browsed as the layer grows; search and paging on those responses is the next edge to close before this points at a very large single layer.
 
 ## Develop
 

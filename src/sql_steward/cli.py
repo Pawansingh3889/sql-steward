@@ -12,6 +12,7 @@ import argparse
 import json
 import os
 import sqlite3
+import sys
 import tempfile
 
 from sql_steward import __version__
@@ -136,6 +137,30 @@ def cmd_demo(args) -> int:
     return 0
 
 
+def cmd_init(args) -> int:
+    from sql_steward.introspect import introspect, to_yaml
+
+    include = [t.strip() for t in args.include.split(",")] if args.include else None
+    exclude = [t.strip() for t in args.exclude.split(",")] if args.exclude else None
+    layer, stats = introspect(args.from_db, include=include, exclude=exclude)
+    text = to_yaml(layer, stats)
+
+    if args.out and args.out != "-":
+        with open(args.out, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        # Summary to stderr so `--out -` piping stays clean.
+        print(
+            f"drafted {args.out}: {stats['tables']} tables, {stats['fields']} fields "
+            f"({stats['pii_fields']} PII-tagged), {stats['joins']} joins -> "
+            f"block_pii={stats['blocked_pii'] or '(none)'}",
+            file=sys.stderr,
+        )
+        print("Review it before serving: narrow entities, check PII tags, add metrics.", file=sys.stderr)
+    else:
+        sys.stdout.write(text)
+    return 0
+
+
 def cmd_audit_verify(args) -> int:
     from sql_steward.safety import audit_status
 
@@ -159,6 +184,13 @@ def main() -> None:
     v.add_argument("layer", nargs="?", default="semantic.yaml")
     sub.add_parser("demo", help="zero-config end-to-end demo on a temp SQLite db")
     sub.add_parser("audit-verify", help="verify the agent-blackbox audit chain")
+    i = sub.add_parser("init", help="draft a semantic layer from a live database")
+    i.add_argument("--from-db", required=True, metavar="URL",
+                   help="SQLAlchemy URL, e.g. sqlite:///data.db or postgresql+psycopg://user@host/db")
+    i.add_argument("--out", default="semantic.yaml",
+                   help="output path, or '-' for stdout (default: semantic.yaml)")
+    i.add_argument("--include", help="comma-separated tables to keep (default: all)")
+    i.add_argument("--exclude", help="comma-separated tables to drop")
 
     args = parser.parse_args()
     if args.cmd in (None, "serve"):
@@ -169,6 +201,8 @@ def main() -> None:
         raise SystemExit(cmd_demo(args))
     if args.cmd == "audit-verify":
         raise SystemExit(cmd_audit_verify(args))
+    if args.cmd == "init":
+        raise SystemExit(cmd_init(args))
 
 
 if __name__ == "__main__":

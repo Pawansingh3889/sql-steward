@@ -3,6 +3,13 @@
 ## [Unreleased]
 
 ### Added
+- **`init --from-db`: draft a semantic layer from a live database.** Reflects a
+  schema over SQLAlchemy (SQL Server, Postgres, SQLite), maps column types,
+  proposes PII tags from column-name heuristics (biased toward over-tagging),
+  and infers joins from foreign keys. Emits a draft that loads and validates as
+  written, with a review header. `--include`/`--exclude` draft only a slice.
+  This is the answer to authoring a layer for a large schema: bootstrap a
+  reviewable file instead of a blank page.
 - **Declarative data-quality checks.** A `checks:` block in the semantic layer
   declares assertions (`not_null`, `unique`, `range`, `accepted_values`,
   `row_count_min`) with `error` or `warn` severity. Two tools expose them:
