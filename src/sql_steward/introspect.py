@@ -20,23 +20,43 @@ import re
 
 from sqlalchemy import create_engine, inspect
 
-# Column-name heuristics -> PII category. Ordered; first match wins. Categories
-# use Presidio recognizer names so they interoperate with pii-veil's policy.
+# Column-name heuristics -> PII category. Ordered; first match wins. Where
+# Presidio has a matching recognizer the name is reused (so pii-veil's policy
+# interoperates); where it does not, a descriptive category is used -- the tag
+# only has to drive blocking, and a human renames on review. Patterns and their
+# categories were hardened against a multi-domain red-team (healthcare, HR,
+# finance, CRM). Deliberately NOT matched, to avoid over-tagging dimension and
+# catalogue columns: country / region / state / county, image / photo / avatar,
+# bare name / title / partner. Bias is toward tagging: a false positive is a
+# review edit, a miss is a leak.
 _PII_RULES: list[tuple[re.Pattern, str]] = [
     (re.compile(r"(^|_)(email|e_mail)($|_)", re.I), "EMAIL_ADDRESS"),
     (re.compile(r"(phone|mobile|telephone|fax|msisdn)", re.I), "PHONE_NUMBER"),
-    (re.compile(r"(credit_?card|card_?number|cc_?num|pan)", re.I), "CREDIT_CARD"),
-    (re.compile(r"(ssn|social_security|nino|national_insurance|passport|nhs)", re.I), "US_SSN"),
-    (re.compile(r"(iban|sort_?code|account_?number|routing)", re.I), "IBAN_CODE"),
-    (re.compile(r"(ip_?address|ipaddr)", re.I), "IP_ADDRESS"),
+    # Payment-card data, including the security fields (CVV never belongs in a store).
+    (re.compile(r"(credit_?card|card_?number|cc_?num|(^|_)pan($|_)|(^|_)cvv2?($|_)|(^|_)cvc($|_)|card_?expiry)", re.I), "CREDIT_CARD"),
+    # Secrets. An agent must never read these; blocking beats masking.
+    (re.compile(r"(password|passwd|(^|_)pwd($|_)|(^|_)secret($|_)|api_?key|access_?token|refresh_?token|private_?key|security_(answer|question))", re.I), "CREDENTIAL"),
+    (re.compile(r"(iban|(^|_)bic($|_)|swift(_?code)?|sort_?code|account_?(number|no|holder|name)|(^|_)acct_?(no|num|number)|routing|bank_?account)", re.I), "IBAN_CODE"),
+    # Government / tax / patient / vehicle identifiers -- direct personal IDs.
+    (re.compile(
+        r"(ssn|social_security|nino|national_insurance|passport"
+        r"|(^|_)tin($|_)|tax_?id|taxpayer|(^|_)utr($|_)|itin|(^|_)tfn($|_)|(^|_)sin($|_)|aadhaar|(^|_)nif($|_)|(^|_)dni($|_)|cpf|cnpj|vat_?(number|reg)"
+        r"|(^|_)mrn($|_)|medical_?record|hospital_?number|chi_?number|patient_?id|nhs|member_?id|medicare|health_?insurance"
+        r"|driving_?licen|driver_?licen|(^|_)dvla($|_)|vehicle_?registration|(^|_)vrm($|_)|number_?plate|reg_?mark"
+        r"|document_?number|(^|_)id_?number|identity_?card|(^|_)kyc|(^|_)mrz($|_))", re.I), "NATIONAL_ID"),
+    # Special-category health data (UK GDPR Art 9).
+    (re.compile(r"(diagnosis|(^|_)icd_?9($|_)|(^|_)icd_?10($|_)|snomed|read_?code|comorbidit)", re.I), "HEALTH_DATA"),
+    (re.compile(r"(ethnicity|ethnic_?(group|origin)|religion|religious|sexual_?orientation|gender_?identity|marital_?status)", re.I), "SPECIAL_CATEGORY"),
+    (re.compile(r"(ip_?address|ipaddr|geo_?ip|geoip)", re.I), "IP_ADDRESS"),
     (re.compile(r"(date_?of_?birth|(^|_)dob($|_)|birth_?date)", re.I), "DATE_TIME"),
-    (re.compile(r"(post_?code|zip_?code|(^|_)zip($|_)|address|street|(^|_)city($|_))", re.I), "LOCATION"),
-    # Person identities: explicit person-name columns and the "who did this"
-    # audit columns (created_by / recorded_by / operator / staff ...). Bare
-    # "name" is intentionally NOT matched -- it is usually a product/thing name;
-    # review adds it if a table proves otherwise.
-    (re.compile(r"(first_?name|last_?name|full_?name|sur_?name|fore_?name|middle_?name)", re.I), "PERSON"),
-    (re.compile(r"(^|_)(person|employee|operator|staff|contact|customer_name|username|user_name|author|owner)($|_)", re.I), "PERSON"),
+    (re.compile(r"(post_?code|zip_?code|(^|_)zip($|_)|address|street|(^|_)city($|_)|(^|_)uprn($|_)|(^|_)lsoa($|_)|(^|_)msoa($|_)|latitude|longitude|(^|_)lat($|_)|(^|_)lng($|_)|geolocation|grid_?ref)", re.I), "LOCATION"),
+    # Person identities: explicit names, the "who did this" audit columns, family
+    # and third-party contacts, org-hierarchy roles, and recruitment roles. Bare
+    # "name" is intentionally NOT matched -- it is usually a product/thing name.
+    (re.compile(r"(first_?name|last_?name|full_?name|sur_?name|fore_?name|middle_?name|maiden_?name|preferred_?name|(^|_)initials($|_)|(^|_)alias($|_)|known_?as|previous_?surname|display_?name|nick_?name)", re.I), "PERSON"),
+    (re.compile(r"(^|_)(person|employee|operator|staff|contact|contact_name|customer_name|username|user_name|author|owner)($|_)", re.I), "PERSON"),
+    (re.compile(r"(next_?of_?kin|(^|_)nok($|_)|emergency_?contact|(^|_)carer|guardian|beneficiary|dependa?nt|(^|_)spouse|payee|cardholder|card_?holder)", re.I), "PERSON"),
+    (re.compile(r"(^|_)(manager|supervisor|line_?manager|reports_?to|reporting_?to|assigned_?to|assignee|reviewer|approver|candidate|applicant|recruiter|interviewer|referee|nominee)($|_)", re.I), "PERSON"),
     (re.compile(r"_by$", re.I), "PERSON"),  # created_by, recorded_by, raised_by, closed_by, ...
 ]
 

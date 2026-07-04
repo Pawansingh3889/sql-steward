@@ -122,3 +122,31 @@ def test_pii_tag_unit():
     assert pii_tag("credit_card_number") == "CREDIT_CARD"
     assert pii_tag("widget_count") is None
     assert pii_tag("name") is None  # bare 'name' left for human review
+
+
+def test_pii_tag_hardened_categories():
+    # Secrets: an agent must never read these.
+    assert pii_tag("password_hash") == "CREDENTIAL"
+    assert pii_tag("api_key") == "CREDENTIAL"
+    assert pii_tag("cvv") == "CREDIT_CARD"
+    # Government / tax / patient / vehicle identifiers.
+    assert pii_tag("tax_id") == "NATIONAL_ID"
+    assert pii_tag("patient_id") == "NATIONAL_ID"
+    assert pii_tag("mrn") == "NATIONAL_ID"
+    assert pii_tag("vehicle_registration") == "NATIONAL_ID"
+    # Special-category and health data.
+    assert pii_tag("diagnosis") == "HEALTH_DATA"
+    assert pii_tag("ethnicity") == "SPECIAL_CATEGORY"
+    assert pii_tag("sexual_orientation") == "SPECIAL_CATEGORY"
+    # People the first-pass rules missed: kin, org hierarchy, recruitment.
+    assert pii_tag("next_of_kin") == "PERSON"
+    assert pii_tag("line_manager") == "PERSON"
+    assert pii_tag("maiden_name") == "PERSON"
+    assert pii_tag("uprn") == "LOCATION"
+
+
+def test_pii_tag_avoids_known_false_positives():
+    # Dimension / catalogue columns that must stay untagged.
+    for col in ("country", "region", "state", "county", "product_name",
+                "image_url", "photo", "title", "unit_cost", "quantity"):
+        assert pii_tag(col) is None, f"{col} should not be tagged"
