@@ -9,6 +9,8 @@ A governed SQL gateway for AI agents, exposed over the Model Context Protocol. T
 
 Most SQL MCP servers hand the model a `run_sql` tool and try to catch the bad queries on the way out. sql-steward removes the tool. There is no path from a prompt to raw SQL at your database, because the only thing the agent can do is name an entity or a metric and pick from allow-lists you wrote.
 
+**See it defend a database live.** The [governed vs ungoverned demo](https://pawan-portfolio.pawankapkoti3889.workers.dev/governance-split.html) runs the same request through a naive `run_sql` agent, which leaks customer PII and empties a table, and through sql-steward, which refuses it at compile time.
+
 ## Three guarantees
 
 1. **Read-only by construction.** There is no `run_sql`, `query`, or `execute` tool. The compiler can only ever build a `SELECT`, so a write isn't blocked, it's unrepresentable.
