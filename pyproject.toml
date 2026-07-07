@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "sql-steward"
-version = "0.2.0"
+version = "0.3.0"
 description = "Governed SQL MCP server: the agent never writes SQL. Queries are compiled from a semantic layer you control, blocked PII is refused before the query runs, and every call can land in a tamper-evident audit log. Multi-dialect (SQL Server, Postgres, SQLite)."
 readme = "README.md"
 license = "MIT"
@@ -50,9 +50,10 @@ dependencies = [
 [project.optional-dependencies]
 postgres = ["psycopg[binary]>=3.1"]
 mssql = ["pyodbc>=5.1"]
-rbac = ["query-warden>=0.1"]      # second-pass role check on the compiled SQL
 mask = ["pii-veil>=0.1"]          # mask any PII left in result rows
-audit = ["agent-blackbox>=0.1"]   # tamper-evident, hash-chained audit log
+# rbac (query-warden) and audit (agent-blackbox) extras return once those
+# packages reach PyPI; until then install them from GitHub and the lazy
+# imports in safety.py pick them up.
 dev = ["pytest>=8.0", "ruff>=0.4"]
 
 [project.scripts]

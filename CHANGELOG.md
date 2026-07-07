@@ -1,6 +1,10 @@
 # Changelog
 
-## [Unreleased]
+## [0.3.0] - 2026-07-07
+
+First PyPI release: `pip install sql-steward`. The `rbac` and `audit` extras
+are parked until query-warden and agent-blackbox reach PyPI themselves; their
+lazy imports in safety.py pick up GitHub installs of those in the meantime.
 
 ### Added
 - **`init --from-db`: draft a semantic layer from a live database.** Reflects a
