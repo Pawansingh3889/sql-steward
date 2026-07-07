@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3.3] - 2026-07-07
+
+### Fixed
+- MCP Registry name uses the case-exact GitHub namespace
+  (`io.github.Pawansingh3889/sql-steward`); marker and server.json realigned.
+
 ## [0.3.2] - 2026-07-07
 
 ### Added

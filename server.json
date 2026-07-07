@@ -1,18 +1,18 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.pawansingh3889/sql-steward",
+  "name": "io.github.Pawansingh3889/sql-steward",
   "title": "sql-steward",
-  "description": "Governed SQL MCP server: the agent never writes SQL. Queries compile from a semantic layer you control, blocked PII is refused before the query runs, and every call can land in a tamper-evident audit log. SQL Server, Postgres, SQLite.",
+  "description": "The agent never writes SQL: queries compile from a semantic layer you control, PII refused first.",
   "repository": {
     "url": "https://github.com/Pawansingh3889/sql-steward",
     "source": "github"
   },
-  "version": "0.3.2",
+  "version": "0.3.3",
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "sql-steward",
-      "version": "0.3.2",
+      "version": "0.3.3",
       "transport": {
         "type": "stdio"
       },
