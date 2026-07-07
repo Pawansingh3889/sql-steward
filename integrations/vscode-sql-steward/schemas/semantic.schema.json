@@ -1,0 +1,236 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "sql-steward semantic layer",
+  "description": "The contract between an AI agent and your database. The agent can read what is described here and nothing else.",
+  "type": "object",
+  "required": ["dialect", "entities"],
+  "additionalProperties": false,
+  "properties": {
+    "dialect": {
+      "description": "The SQL dialect queries are compiled for.",
+      "type": "string",
+      "enum": ["postgres", "tsql", "sqlite", "mysql", "snowflake", "bigquery"]
+    },
+    "entities": {
+      "description": "The tables the agent may read, each described as a logical entity.",
+      "type": "object",
+      "additionalProperties": { "$ref": "#/definitions/entity" }
+    },
+    "joins": {
+      "description": "The only relationships the agent may traverse. A join not listed here is refused, not invented.",
+      "type": "array",
+      "items": { "$ref": "#/definitions/join" }
+    },
+    "metrics": {
+      "description": "Pre-approved aggregates. The agent picks dimensions and filters from the allow-lists; it cannot change the aggregation.",
+      "type": "object",
+      "additionalProperties": { "$ref": "#/definitions/metric" }
+    },
+    "checks": {
+      "description": "Declared data-quality assertions. Each compiles to a violation count; the agent runs them but cannot invent new ones.",
+      "type": "object",
+      "additionalProperties": { "$ref": "#/definitions/check" }
+    },
+    "policy": {
+      "description": "What the layer refuses, enforced at the tool boundary before any SQL is compiled.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "block_pii": {
+          "description": "PII categories refused before a query runs. Any field tagged with one of these is unreadable.",
+          "type": "array",
+          "items": { "$ref": "#/definitions/piiCategory" }
+        },
+        "max_rows": {
+          "description": "Hard ceiling on rows any single query may return.",
+          "type": "integer",
+          "minimum": 1,
+          "default": 1000
+        }
+      }
+    }
+  },
+  "definitions": {
+    "entity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["table"],
+      "properties": {
+        "table": {
+          "description": "The physical table name this entity maps to.",
+          "type": "string"
+        },
+        "primary_key": {
+          "description": "The primary key column, used for row identity.",
+          "type": "string"
+        },
+        "description": {
+          "description": "What this entity is. The agent reads this to understand the data.",
+          "type": "string"
+        },
+        "fields": {
+          "description": "The columns the agent may reference. A column not listed here is invisible.",
+          "type": "object",
+          "additionalProperties": { "$ref": "#/definitions/field" }
+        },
+        "search": {
+          "$ref": "#/definitions/search"
+        }
+      }
+    },
+    "field": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "description": "The logical column type.",
+          "type": "string",
+          "examples": ["int", "text", "numeric", "timestamp", "date", "bool", "vector"]
+        },
+        "pii": {
+          "description": "Tag this column as personal data of the given category. If the category is in policy.block_pii, the column cannot be read.",
+          "$ref": "#/definitions/piiCategory"
+        },
+        "description": {
+          "description": "What this column holds.",
+          "type": "string"
+        }
+      }
+    },
+    "search": {
+      "description": "Enables semantic_search() over this entity (PostgreSQL + pgvector only).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["vector_column"],
+      "properties": {
+        "vector_column": {
+          "description": "The pgvector column holding the embeddings.",
+          "type": "string"
+        },
+        "dim": {
+          "description": "Embedding dimensionality.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "returns": {
+          "description": "Columns returned by a search. The embedding itself is never returned.",
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "join": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["left", "right"],
+      "properties": {
+        "left": {
+          "description": "The entity on the left of the join.",
+          "type": "string"
+        },
+        "right": {
+          "description": "The entity on the right of the join.",
+          "type": "string"
+        },
+        "on": {
+          "description": "The join condition over logical entity names, e.g. \"subscriptions.customer_id = customers.id\".",
+          "type": "string"
+        }
+      }
+    },
+    "metric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entity", "aggregate", "field"],
+      "properties": {
+        "entity": {
+          "description": "The entity this metric aggregates over.",
+          "type": "string"
+        },
+        "aggregate": {
+          "description": "The aggregation. Fixed in the layer; the agent cannot change it.",
+          "type": "string",
+          "enum": ["sum", "count", "count_distinct", "avg", "min", "max"]
+        },
+        "field": {
+          "description": "The column aggregated. Use \"*\" for count.",
+          "type": "string"
+        },
+        "description": {
+          "description": "What this metric measures.",
+          "type": "string"
+        },
+        "dimensions_allowed": {
+          "description": "Columns the agent may group by. Optionally \"entity.field\" across a declared join.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "filters_allowed": {
+          "description": "Columns the agent may filter on. Optionally \"entity.field\" across a declared join.",
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entity", "kind"],
+      "properties": {
+        "entity": {
+          "description": "The entity this check runs against.",
+          "type": "string"
+        },
+        "kind": {
+          "description": "The assertion type.",
+          "type": "string",
+          "enum": ["not_null", "unique", "range", "accepted_values", "row_count_min"]
+        },
+        "field": {
+          "description": "The column checked. Required for all kinds except row_count_min.",
+          "type": "string"
+        },
+        "min": {
+          "description": "Lower bound (range), or minimum row count (row_count_min).",
+          "type": "number"
+        },
+        "max": {
+          "description": "Upper bound for the range kind.",
+          "type": "number"
+        },
+        "values": {
+          "description": "The allowed set for the accepted_values kind.",
+          "type": "array"
+        },
+        "severity": {
+          "description": "Whether a violation fails or only warns.",
+          "type": "string",
+          "enum": ["error", "warn"],
+          "default": "error"
+        },
+        "description": {
+          "description": "What this check guards.",
+          "type": "string"
+        }
+      }
+    },
+    "piiCategory": {
+      "description": "A PII category. sql-steward uses Presidio-style names; these are the common ones, but any recognizer name your pii-veil install knows is valid.",
+      "type": "string",
+      "examples": [
+        "PERSON",
+        "EMAIL_ADDRESS",
+        "PHONE_NUMBER",
+        "CREDIT_CARD",
+        "US_SSN",
+        "IBAN_CODE",
+        "IP_ADDRESS",
+        "LOCATION",
+        "DATE_TIME",
+        "US_BANK_NUMBER",
+        "UK_NHS",
+        "MEDICAL_LICENSE"
+      ]
+    }
+  }
+}

@@ -1,0 +1,72 @@
+{
+  "name": "vscode-sql-steward",
+  "displayName": "sql-steward — Governed SQL layer",
+  "description": "Validation, autocomplete, and hover docs for sql-steward semantic layer files, plus a command to run the full validator.",
+  "version": "0.1.0",
+  "publisher": "pawansingh3889",
+  "license": "MIT",
+  "icon": "icon.png",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Linters",
+    "Programming Languages"
+  ],
+  "keywords": [
+    "sql-steward",
+    "mcp",
+    "semantic-layer",
+    "governance",
+    "sql",
+    "yaml"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Pawansingh3889/sql-steward.git",
+    "directory": "integrations/vscode-sql-steward"
+  },
+  "homepage": "https://github.com/Pawansingh3889/sql-steward/tree/main/integrations/vscode-sql-steward#readme",
+  "bugs": {
+    "url": "https://github.com/Pawansingh3889/sql-steward/issues"
+  },
+  "main": "./extension.js",
+  "activationEvents": [
+    "onLanguage:yaml"
+  ],
+  "extensionDependencies": [
+    "redhat.vscode-yaml"
+  ],
+  "contributes": {
+    "yamlValidation": [
+      {
+        "fileMatch": [
+          "semantic.yaml",
+          "semantic.yml",
+          "semantic.*.yaml",
+          "semantic.*.yml",
+          "**/semantic.yaml",
+          "**/semantic.yml"
+        ],
+        "url": "./schemas/semantic.schema.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "sqlSteward.validate",
+        "title": "sql-steward: Validate semantic layer",
+        "category": "sql-steward"
+      }
+    ],
+    "configuration": {
+      "title": "sql-steward",
+      "properties": {
+        "sqlSteward.executable": {
+          "type": "string",
+          "default": "sql-steward",
+          "description": "Path to the sql-steward CLI. Change this if it is not on your PATH (e.g. a virtualenv: .venv/Scripts/sql-steward)."
+        }
+      }
+    }
+  }
+}
