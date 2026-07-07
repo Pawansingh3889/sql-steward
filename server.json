@@ -1,0 +1,37 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.pawansingh3889/sql-steward",
+  "title": "sql-steward",
+  "description": "Governed SQL MCP server: the agent never writes SQL. Queries compile from a semantic layer you control, blocked PII is refused before the query runs, and every call can land in a tamper-evident audit log. SQL Server, Postgres, SQLite.",
+  "repository": {
+    "url": "https://github.com/Pawansingh3889/sql-steward",
+    "source": "github"
+  },
+  "version": "0.3.2",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "sql-steward",
+      "version": "0.3.2",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "SQL_STEWARD_DB_URL",
+          "description": "SQLAlchemy URL of the database to read (read-only account recommended)",
+          "isRequired": true,
+          "format": "string",
+          "isSecret": true
+        },
+        {
+          "name": "SQL_STEWARD_LAYER",
+          "description": "Path to the semantic layer YAML (default: semantic.yaml)",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false
+        }
+      ]
+    }
+  ]
+}

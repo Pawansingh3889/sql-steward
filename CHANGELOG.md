@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2] - 2026-07-07
+
+### Added
+- Listed in the official MCP Registry as `io.github.pawansingh3889/sql-steward`:
+  `server.json` at the repo root plus the registry's ownership marker in this
+  README. No code changes.
+
 ## [0.3.1] - 2026-07-07
 
 ### Fixed
