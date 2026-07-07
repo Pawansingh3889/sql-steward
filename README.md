@@ -1,5 +1,7 @@
 # sql-steward
 
+[![PyPI](https://img.shields.io/pypi/v/sql-steward)](https://pypi.org/project/sql-steward/) [![Downloads](https://static.pepy.tech/badge/sql-steward)](https://pepy.tech/projects/sql-steward)
+
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 
