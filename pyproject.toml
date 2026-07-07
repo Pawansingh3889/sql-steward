@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "sql-steward"
-version = "0.3.0"
+version = "0.3.1"
 description = "Governed SQL MCP server: the agent never writes SQL. Queries are compiled from a semantic layer you control, blocked PII is refused before the query runs, and every call can land in a tamper-evident audit log. Multi-dialect (SQL Server, Postgres, SQLite)."
 readme = "README.md"
 license = "MIT"

@@ -8,7 +8,12 @@ your existing query-warden / pii-veil / agent-blackbox pieces.
 from sql_steward.compiler import Compiled, Refusal, compile_metric, compile_records
 from sql_steward.semantic import SemanticLayer
 
-__version__ = "0.2.0"
+try:  # single source of truth: the installed package metadata
+    from importlib.metadata import version as _version
+
+    __version__ = _version("sql-steward")
+except Exception:  # running from a source tree without installation
+    __version__ = "0.0.0.dev0"
 __all__ = [
     "SemanticLayer",
     "Compiled",

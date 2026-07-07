@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3.1] - 2026-07-07
+
+### Fixed
+- `--version` reported a stale hardcoded number; `__version__` now reads the
+  installed package metadata, so it can never drift from pyproject again.
+
 ## [0.3.0] - 2026-07-07
 
 First PyPI release: `pip install sql-steward`. The `rbac` and `audit` extras
