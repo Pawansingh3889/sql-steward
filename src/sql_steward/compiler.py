@@ -289,6 +289,15 @@ def compile_vector_search(
         selected = list(ent.search.returns)
     else:
         selected = [f for f in ent.fields if f != ent.search.vector_column]
+    if ent.search.vector_column in selected:
+        raise Refusal(
+            kind="vector_column_not_returnable",
+            detail=(
+                f"The embedding column '{entity}.{ent.search.vector_column}' is "
+                f"never returned. Ask for the entity's non-vector fields instead."
+            ),
+            recovery={"vector_column": ent.search.vector_column},
+        )
     for f in selected:
         _check_pii(layer, entity, ent.get_field(f))
 
