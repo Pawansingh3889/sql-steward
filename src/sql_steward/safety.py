@@ -12,6 +12,8 @@ installed or a variable isn't set, the matching step is a no-op.
 from __future__ import annotations
 
 import os
+import sqlite3
+import time
 
 from sql_steward.compiler import Refusal
 
@@ -96,17 +98,25 @@ def mask_rows(rows: list[dict]) -> list[dict]:
         return rows
 
 
-# --- per-role query budget (hard cap) --------------------------------------
+# --- persistent, windowed per-role query budget ----------------------------
 
-_budget_counts: dict = {}
+_budget_counts: dict = {}  # in-memory fallback if the persistent store is unusable
+
+
+def _budget_db_path() -> str:
+    return os.environ.get("SQL_STEWARD_BUDGET_DB", "logs/steward-budget.db")
 
 
 def enforce_budget() -> None:
-    """Hard cap on queries per role for this server session.
+    """Rate-limit queries per role, persistently.
 
-    Set ``SQL_STEWARD_QUERY_BUDGET`` to an integer. Mirrors the runtime
-    spend-cap idea from gateway-style governance, kept simple: once a role has
-    run that many queries this process, further ones are refused. No-op if unset.
+    Set ``SQL_STEWARD_QUERY_BUDGET`` to an integer cap. By default it is a
+    persistent lifetime limit per role, stored in SQLite so a caller cannot reset
+    it by reconnecting. Set ``SQL_STEWARD_BUDGET_WINDOW`` (seconds) to make it a
+    sliding-window rate limit instead: at most N queries per role in any window.
+    ``SQL_STEWARD_BUDGET_DB`` chooses the store (default logs/steward-budget.db).
+    No-op if the cap is unset; falls back to an in-memory session cap only if the
+    store cannot be opened.
     """
     cap = os.environ.get("SQL_STEWARD_QUERY_BUDGET")
     if not cap:
@@ -116,14 +126,68 @@ def enforce_budget() -> None:
     except ValueError:
         return
     role = os.environ.get("SQL_STEWARD_ROLE", "_default")
-    used = _budget_counts.get(role, 0) + 1
-    _budget_counts[role] = used
-    if used > cap_n:
+
+    window_s = None
+    raw_window = os.environ.get("SQL_STEWARD_BUDGET_WINDOW")
+    if raw_window:
+        try:
+            w = float(raw_window)
+            window_s = w if w > 0 else None
+        except ValueError:
+            window_s = None
+
+    path = _budget_db_path()
+    try:
+        parent = os.path.dirname(path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        conn = sqlite3.connect(path)
+    except Exception:
+        # Persistent store unavailable: degrade to an in-memory session cap
+        # rather than silently dropping the budget entirely.
+        _enforce_budget_memory(cap_n, role)
+        return
+
+    try:
+        now = time.time()
+        conn.execute("CREATE TABLE IF NOT EXISTS budget (role TEXT NOT NULL, ts REAL NOT NULL)")
+        if window_s is not None:
+            cutoff = now - window_s
+            conn.execute("DELETE FROM budget WHERE ts < ?", (cutoff,))
+            (used,) = conn.execute(
+                "SELECT COUNT(*) FROM budget WHERE role = ? AND ts >= ?",
+                (role, cutoff),
+            ).fetchone()
+        else:
+            (used,) = conn.execute(
+                "SELECT COUNT(*) FROM budget WHERE role = ?", (role,)
+            ).fetchone()
+        if used >= cap_n:
+            conn.commit()
+            raise Refusal(
+                kind="budget_exceeded",
+                detail=(
+                    f"Query budget of {cap_n} for role '{role}' is exhausted"
+                    + (f" in the last {int(window_s)}s." if window_s is not None
+                       else " (persistent cap).")
+                ),
+                recovery={"budget": cap_n, "role": role, "window_seconds": window_s},
+            )
+        conn.execute("INSERT INTO budget (role, ts) VALUES (?, ?)", (role, now))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _enforce_budget_memory(cap_n: int, role: str) -> None:
+    used = _budget_counts.get(role, 0)
+    if used >= cap_n:
         raise Refusal(
             kind="budget_exceeded",
             detail=f"Query budget of {cap_n} for role '{role}' is exhausted for this session.",
-            recovery={"budget": cap_n, "role": role},
+            recovery={"budget": cap_n, "role": role, "window_seconds": None},
         )
+    _budget_counts[role] = used + 1
 
 
 # --- audit via agent-blackbox ----------------------------------------------

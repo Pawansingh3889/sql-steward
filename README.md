@@ -130,7 +130,8 @@ export SQL_STEWARD_POLICY=/path/to/policy.yaml   # query-warden second-pass role
 export SQL_STEWARD_ROLE=analyst
 export SQL_STEWARD_MASK=1                         # pii-veil masks anything left in results
 export SQL_STEWARD_AUDIT_DB=logs/steward.db       # agent-blackbox audit chain (on if installed)
-export SQL_STEWARD_QUERY_BUDGET=200               # hard cap on queries per role per session
+export SQL_STEWARD_QUERY_BUDGET=200               # persistent per-role query cap (SQLite-backed)
+export SQL_STEWARD_BUDGET_WINDOW=3600             # optional: make the cap a sliding window, in seconds
 export SQL_STEWARD_EMBED_URL=http://localhost:11434/api/embeddings  # local embeddings for semantic_search
 export SQL_STEWARD_EMBED_MODEL=nomic-embed-text
 ```
