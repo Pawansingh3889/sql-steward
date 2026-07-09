@@ -159,6 +159,28 @@ The query text is embedded locally (set `SQL_STEWARD_EMBED_URL` to a local Ollam
 - [pii-veil](https://github.com/Pawansingh3889/pii-veil) masks any PII that survives into result rows.
 - [agent-blackbox](https://github.com/Pawansingh3889/agent-blackbox) records every call in a hash-chained ledger; `sql-steward audit-verify` checks it.
 
+## Security model
+
+sql-steward governs the path from the model to your database. It assumes the process that calls its tools is trusted. That boundary is the difference between deploying it safely and exposing it, so it is worth stating plainly.
+
+**What it enforces, whatever the model asks.** Every call runs the same gate: read-only by construction, blocked PII refused before retrieval, an optional role check via query-warden, results masked by pii-veil, and a hash-chained audit of the call. A jailbroken model still cannot write, cannot read a blocked column, and cannot reach an entity the layer does not define. These hold by construction, not by trusting the model to behave.
+
+**What it does not do.** sql-steward is an enforcement plane, not a front door.
+
+- It does not authenticate the caller. `SQL_STEWARD_ROLE` is configuration, not a verified identity; sql-steward trusts that the role it is handed is the correct one.
+- It does not resolve per-user permissions. If different users should see different data, the caller maps the user to a role and sets it before invoking. The role check enforces a policy, it does not decide who you are.
+- It does not secure transport. Run it over stdio to a local host, or place it behind something that terminates TLS.
+- It does not manage secrets. `SQL_STEWARD_DB_URL` and the audit key `AGENT_BLACKBOX_KEY` are read from the environment; supply them from a secret store, not a checked-in file.
+
+**What you provide.** sql-steward is built to sit behind a trusted caller, whether that is an MCP host on the same machine or a gateway that has already authenticated the user.
+
+- Invoke it from a trusted process: a subprocess of an MCP host you control (stdio), or a service behind a gateway that authenticates the request and maps the verified identity to a role before the call.
+- Give it a least-privilege, read-only database account. Writes are unrepresentable in the compiler, but a read-only grant is defense in depth and the right blast radius if a dependency is ever wrong.
+- Keep the database and any local embedding endpoint on a private network. Do not expose the server to untrusted callers.
+- Treat the connection string and the audit key as secrets.
+
+**The threat it is built for.** The design assumes a capable, possibly compromised model and a trusted operator. It bounds what the agent can do with your database. It does not replace your identity provider and is not meant to face an untrusted network alone. Point it at a real database from behind a host or gateway you trust, and the three guarantees are what the model is left with.
+
 ## How this is different
 
 A typical SQL MCP validates arbitrary SQL the model wrote (a blocklist: catch what's bad). sql-steward compiles SQL from definitions you wrote (an allow-list: only what's described exists). The read-only and PII guarantees hold by construction rather than by inspection, and the query surface is the same across three engines.
