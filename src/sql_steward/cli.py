@@ -175,6 +175,23 @@ def cmd_serve(args) -> int:
     return 0
 
 
+def cmd_export(args) -> int:
+    from sql_steward.osi_export import to_osi_yaml
+
+    layer = SemanticLayer.from_yaml(args.layer)
+    text, issues = to_osi_yaml(layer, model_name=args.model_name)
+    for issue in issues:
+        print(f"note: {issue}", file=sys.stderr)
+    if args.out == "-":
+        print(text, end="")
+    else:
+        with open(args.out, "w", encoding="utf-8") as f:
+            f.write(text)
+        print(f"Wrote {args.out} (OSI {len(text.splitlines())} lines, "
+              f"{len(issues)} notes)", file=sys.stderr)
+    return 0
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="sql-steward", description=__doc__)
     parser.add_argument("--version", action="version", version=f"sql-steward {__version__}")
@@ -191,6 +208,11 @@ def main() -> None:
                    help="output path, or '-' for stdout (default: semantic.yaml)")
     i.add_argument("--include", help="comma-separated tables to keep (default: all)")
     i.add_argument("--exclude", help="comma-separated tables to drop")
+    e = sub.add_parser("export", help="export the layer as an Apache Ossie (OSI) document")
+    e.add_argument("layer", nargs="?", default="semantic.yaml")
+    e.add_argument("--out", default="-", help="output path, or '-' for stdout (default: -)")
+    e.add_argument("--model-name", default="sql_steward_model",
+                   help="OSI semantic_model name (default: sql_steward_model)")
 
     args = parser.parse_args()
     if args.cmd in (None, "serve"):
@@ -203,6 +225,8 @@ def main() -> None:
         raise SystemExit(cmd_audit_verify(args))
     if args.cmd == "init":
         raise SystemExit(cmd_init(args))
+    if args.cmd == "export":
+        raise SystemExit(cmd_export(args))
 
 
 if __name__ == "__main__":

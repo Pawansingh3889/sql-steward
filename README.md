@@ -196,6 +196,25 @@ The nearest tools are not other MCP servers, they are semantic layers. Cube and 
 
 Short version: a semantic layer makes queries safe on its platform. sql-steward makes an agent safe on your infrastructure, across every surface it can reach.
 
+That difference does not mean living on an island. The industry is converging on
+[Apache Ossie](https://github.com/apache/ossie) (the Open Semantic Interchange
+format, incubating at the ASF, started by the Snowflake, dbt and Salesforce
+working group) as the neutral way to move semantic models between tools, and
+sql-steward speaks it:
+
+```bash
+sql-steward export semantic.yaml --out model.osi.yaml
+```
+
+Entities, joins and metrics map to OSI datasets, relationships and metrics.
+OSI has no governance vocabulary yet, so the parts that make the layer a
+contract rather than a catalog, the PII tags, the policy block, metric
+allow-lists and checks, travel in `custom_extensions` under
+`vendor_name: SQL_STEWARD`; anything that cannot be represented is reported
+as a note on stderr instead of dropped silently. The output passes Ossie's
+own validator, so a layer written for sql-steward can be handed to anything
+that reads the standard.
+
 ## Scaling to a real schema
 
 The semantic layer is authored by hand on purpose, so it reads and reviews like code. That is the right default for tens of tables and the wrong one for thousands: nobody hand-writes a layer for a 10,000-table ERP, and returning the whole layer in one `list_entities` call would not fit an agent's context anyway. How that scales:

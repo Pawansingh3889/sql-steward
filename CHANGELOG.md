@@ -1,5 +1,17 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- `sql-steward export`: emit the semantic layer as an Apache Ossie (OSI)
+  document, the vendor-neutral semantic-model interchange format incubating
+  at the ASF. Entities, joins and metrics map to OSI datasets, relationships
+  and metrics; everything OSI cannot express (PII tags, the policy block,
+  metric allow-lists, checks, vector-search config) rides in
+  `custom_extensions` under `vendor_name: SQL_STEWARD`, and anything not
+  representable is reported as a note rather than dropped silently. Output
+  passes Ossie's own validator (spec 0.2.0.dev0).
+
 ## [0.3.3] - 2026-07-07
 
 ### Fixed
