@@ -1,0 +1,26 @@
+name: mcp-registry
+
+# Publish server.json to the official MCP Registry on every release.
+# Auth is GitHub OIDC: the workflow proves this repo owns the
+# io.github.Pawansingh3889 namespace, so no token is stored anywhere.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install mcp-publisher
+        run: |
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m).tar.gz" | tar xz mcp-publisher
+      - name: Publish to MCP Registry
+        run: |
+          ./mcp-publisher login github-oidc
+          ./mcp-publisher publish
