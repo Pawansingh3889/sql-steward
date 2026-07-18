@@ -83,7 +83,7 @@ def describe_entity(entity: str) -> dict:
     try:
         e = layer.get_entity(entity)
     except SemanticError as ex:
-        return {"error": str(ex)}
+        return _semantic_error(ex)
     block = layer.policy.block_pii
     return {
         "entity": e.name,
@@ -212,7 +212,9 @@ def run_checks() -> dict:
     try:
         layer = get_layer()
         engine = get_engine()
-    except (SemanticError, RuntimeError) as ex:
+    except SemanticError as ex:
+        return _semantic_error(ex)
+    except RuntimeError as ex:
         return {"error": str(ex)}
 
     results = []
@@ -255,6 +257,22 @@ def audit_verify() -> dict:
     return audit_status()
 
 
+def _semantic_error(ex: SemanticError) -> dict:
+    """Serialize a SemanticError for the agent.
+
+    Unknown-name lookups carry `kind` and `recovery` (what IS available, plus
+    closest spellings) so the agent can correct itself in the same turn --
+    the same envelope idea as Refusal.as_dict(). The `error` key stays for
+    anything already keying on it.
+    """
+    out: dict = {"error": str(ex)}
+    if ex.kind:
+        out["kind"] = ex.kind
+    if ex.recovery:
+        out["recovery"] = ex.recovery
+    return out
+
+
 def _run(compile_fn, target: str, kind: str) -> dict:
     try:
         layer = get_layer()
@@ -263,7 +281,7 @@ def _run(compile_fn, target: str, kind: str) -> dict:
         audit(action=f"{kind}_refused", target=target, meta=r.kind, outcome="refused")
         return r.as_dict()
     except SemanticError as ex:
-        return {"error": str(ex)}
+        return _semantic_error(ex)
 
     try:
         enforce_rbac(compiled.sql, compiled.dialect)

@@ -11,6 +11,7 @@ is reviewed like any other code.
 """
 from __future__ import annotations
 
+import difflib
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -22,7 +23,32 @@ ALLOWED_CHECKS = {"not_null", "unique", "range", "accepted_values", "row_count_m
 
 
 class SemanticError(ValueError):
-    """The semantic layer itself is malformed (bad YAML, unknown reference)."""
+    """The semantic layer is malformed, or a caller named something it doesn't have.
+
+    Unknown-name lookups (entity, metric, field) also carry a machine-readable
+    `kind` and a `recovery` dict listing what IS available -- the same idea as
+    compiler.Refusal -- so the MCP server can hand an agent something it can
+    act on instead of a bare string. The agent's most common mistake is a
+    misspelled name; with the available list (and closest spellings) in the
+    error itself, it corrects in the same turn rather than spending a second
+    round-trip on list_metrics / describe_entity. Layer-authoring errors
+    (bad YAML, missing keys) leave both unset.
+    """
+
+    def __init__(self, message: str, kind: str | None = None, recovery: dict | None = None):
+        super().__init__(message)
+        self.kind = kind
+        self.recovery = recovery or {}
+
+
+def _suggest(name: str, candidates) -> dict:
+    """Recovery payload for an unknown-name error: everything that exists,
+    plus the closest spellings when the name looks like a typo."""
+    recovery: dict = {"available": sorted(candidates)}
+    close = difflib.get_close_matches(name, list(candidates), n=3, cutoff=0.6)
+    if close:
+        recovery["did_you_mean"] = close
+    return recovery
 
 
 def _join_on(join: dict) -> str:
@@ -76,7 +102,9 @@ class EntityDef:
     def get_field(self, field_name: str) -> FieldDef:
         if field_name not in self.fields:
             raise SemanticError(
-                f"Entity '{self.name}' has no field '{field_name}'"
+                f"Entity '{self.name}' has no field '{field_name}'",
+                kind="unknown_field",
+                recovery={"entity": self.name, **_suggest(field_name, self.fields)},
             )
         return self.fields[field_name]
 
@@ -151,12 +179,20 @@ class SemanticLayer:
 
     def get_entity(self, name: str) -> EntityDef:
         if name not in self.entities:
-            raise SemanticError(f"Unknown entity '{name}'")
+            raise SemanticError(
+                f"Unknown entity '{name}'",
+                kind="unknown_entity",
+                recovery=_suggest(name, self.entities),
+            )
         return self.entities[name]
 
     def get_metric(self, name: str) -> MetricDef:
         if name not in self.metrics:
-            raise SemanticError(f"Unknown metric '{name}'")
+            raise SemanticError(
+                f"Unknown metric '{name}'",
+                kind="unknown_metric",
+                recovery=_suggest(name, self.metrics),
+            )
         return self.metrics[name]
 
     def find_join(self, a: str, b: str) -> JoinDef | None:

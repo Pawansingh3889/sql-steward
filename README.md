@@ -83,7 +83,7 @@ policy:
   max_rows: 1000
 ```
 
-Ask for a join that isn't defined and you get `unreachable_entity`, not an invented relationship. Ask to group a metric by a dimension that isn't listed and you get `dimension_not_allowed`.
+Ask for a join that isn't defined and you get `unreachable_entity`, not an invented relationship. Ask to group a metric by a dimension that isn't listed and you get `dimension_not_allowed`. Misspell a metric or field and the error lists what does exist, with the closest spellings, so an agent corrects itself in one turn instead of making a second discovery call.
 
 ## Tools exposed to the agent
 
@@ -101,7 +101,7 @@ Filters are `{field, op, value}`; operators are `=, !=, <, <=, >, >=, like, in, 
 
 ## Wire it into an MCP client
 
-`servers.yaml` lives wherever you point `SQL_STEWARD_LAYER`. Claude Desktop (`claude_desktop_config.json`):
+The semantic layer YAML lives wherever you point `SQL_STEWARD_LAYER`. Claude Desktop (`claude_desktop_config.json`):
 
 ```json
 {

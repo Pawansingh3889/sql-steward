@@ -3,6 +3,15 @@
 ## [Unreleased]
 
 ### Added
+- Unknown-name errors are now self-correcting for agents. Asking for a metric,
+  entity or field that does not exist used to return a bare string; the reply
+  now carries `kind` (`unknown_metric` / `unknown_entity` / `unknown_field`)
+  and a `recovery` block listing everything that IS available, plus the
+  closest spellings when the name looks like a typo. Same envelope idea as
+  refusals, and additive: the `error` key is unchanged, so nothing keying on
+  it breaks. An agent that misspells a name can fix its call in the same turn
+  instead of spending a second round-trip on `list_metrics` or
+  `describe_entity`.
 - `sql-steward export`: emit the semantic layer as an Apache Ossie (OSI)
   document, the vendor-neutral semantic-model interchange format incubating
   at the ASF. Entities, joins and metrics map to OSI datasets, relationships

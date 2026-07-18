@@ -80,3 +80,48 @@ def test_count_star_metric_allowed():
     d["metrics"]["n"] = {"entity": "orders", "aggregate": "count", "field": "*"}
     layer = SemanticLayer.from_dict(d)
     assert layer.get_metric("n").field == "*"
+
+
+def test_unknown_entity_carries_recovery():
+    layer = SemanticLayer.from_dict(BASE)
+    with pytest.raises(SemanticError) as e:
+        layer.get_entity("orderz")
+    assert e.value.kind == "unknown_entity"
+    assert e.value.recovery["available"] == ["orders"]
+    assert e.value.recovery["did_you_mean"] == ["orders"]
+
+
+def test_unknown_metric_carries_recovery():
+    layer = SemanticLayer.from_dict(BASE)
+    with pytest.raises(SemanticError) as e:
+        layer.get_metric("revenu")
+    assert e.value.kind == "unknown_metric"
+    assert e.value.recovery["available"] == ["revenue"]
+    assert e.value.recovery["did_you_mean"] == ["revenue"]
+
+
+def test_unknown_field_carries_recovery():
+    layer = SemanticLayer.from_dict(BASE)
+    with pytest.raises(SemanticError) as e:
+        layer.get_entity("orders").get_field("totall")
+    assert e.value.kind == "unknown_field"
+    assert e.value.recovery["entity"] == "orders"
+    assert e.value.recovery["available"] == ["id", "total"]
+    assert e.value.recovery["did_you_mean"] == ["total"]
+
+
+def test_unknown_name_far_from_everything_lists_available_only():
+    layer = SemanticLayer.from_dict(BASE)
+    with pytest.raises(SemanticError) as e:
+        layer.get_entity("xyzzy")
+    assert e.value.recovery["available"] == ["orders"]
+    assert "did_you_mean" not in e.value.recovery
+
+
+def test_layer_authoring_errors_stay_bare():
+    d = copy.deepcopy(BASE)
+    del d["dialect"]
+    with pytest.raises(SemanticError) as e:
+        SemanticLayer.from_dict(d)
+    assert e.value.kind is None
+    assert e.value.recovery == {}
