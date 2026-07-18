@@ -193,7 +193,13 @@ def cmd_export(args) -> int:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(prog="sql-steward", description=__doc__)
+    parser = argparse.ArgumentParser(
+        prog="sql-steward",
+        description=__doc__,
+        # keep the docstring's command table readable in --help; the default
+        # formatter reflows it into one run-on line
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     parser.add_argument("--version", action="version", version=f"sql-steward {__version__}")
     sub = parser.add_subparsers(dest="cmd")
     sub.add_parser("serve", help="run the MCP server over stdio")
