@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.4.0] - 2026-07-18
 
 ### Added
 - Unknown-name errors are now self-correcting for agents. Asking for a metric,
@@ -20,6 +20,33 @@
   `custom_extensions` under `vendor_name: SQL_STEWARD`, and anything not
   representable is reported as a note rather than dropped silently. Output
   passes Ossie's own validator (spec 0.2.0.dev0).
+- An adversarial red-team test suite covering what a jailbroken model might
+  attempt through the tool surface: write attempts, PII exfiltration
+  (including a deliberately misconfigured metric as a backstop), SQL
+  injection via values and identifiers, cross-entity reach, and limit abuse.
+  Each case asserts the request is refused, bound as a parameter, or kept out
+  of the compiled SQL.
+- A documented security model and trust boundary in the README: what
+  sql-steward enforces regardless of what the model asks, what it
+  deliberately does not do (authenticate the caller, per-user permissions,
+  transport, secrets), and the deployment contract the operator provides.
+- VS Code extension (`integrations/vscode-sql-steward`): JSON Schema
+  validation for the semantic layer plus a `sql-steward: validate` command.
+  Installable from a locally built vsix; not yet on the Marketplace.
+
+### Changed
+- Per-role query budgets are persistent and windowed. Usage is backed by
+  SQLite so a caller can no longer reset its cap by reconnecting, and an
+  optional `SQL_STEWARD_BUDGET_WINDOW` turns the lifetime cap into a
+  sliding-window rate limit. Same `SQL_STEWARD_QUERY_BUDGET` entry point;
+  falls back to the in-memory cap if the store cannot be opened.
+
+### Fixed
+- `semantic_search` refuses an explicit request for the raw embedding column
+  (`vector_column_not_returnable`). The docs promise the embedding is never
+  returned; the compiler now enforces it.
+- `sql-steward --help` keeps the command table's formatting instead of
+  reflowing it into one line.
 
 ## [0.3.3] - 2026-07-07
 

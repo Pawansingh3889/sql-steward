@@ -7,12 +7,12 @@
     "url": "https://github.com/Pawansingh3889/sql-steward",
     "source": "github"
   },
-  "version": "0.3.3",
+  "version": "0.4.0",
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "sql-steward",
-      "version": "0.3.3",
+      "version": "0.4.0",
       "transport": {
         "type": "stdio"
       },
