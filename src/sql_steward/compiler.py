@@ -250,6 +250,11 @@ def compile_metric(
         query = query.where(cond)
     if group_exprs:
         query = query.group_by(*group_exprs)
+    # Rank by the aggregate so LIMIT means "top N", not "first N by scan
+    # order". This makes every metric result deterministic (highest first)
+    # and is what makes a top-N request correct at the source, rather than
+    # relying on the client to re-sort an already-truncated set.
+    query = query.order_by(f"{metric} DESC")
     query = query.limit(_clamp_limit(layer, limit))
 
     return Compiled(_emit(query, dialect), where.params, dialect, tuple(sorted(touched)))
